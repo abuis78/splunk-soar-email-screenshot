@@ -1,0 +1,204 @@
+{
+    "appid": "a3f7c921-5e84-4b12-9d6a-8c2e1f047b53",
+    "name": "Email Screenshot",
+    "description": "Renders email bodies (HTML or plain text) as PNG screenshots simulating an Outlook-style view. Useful for phishing analysis and incident documentation.",
+    "type": "generic",
+    "product_vendor": "Andreas Buis",
+    "product_name": "Email Screenshot",
+    "product_version_regex": ".*",
+    "publisher": "Andreas Buis",
+    "contributors": [
+        {
+            "name": "Andreas Buis"
+        },
+        {
+            "name": "Created with Claude, model claude-sonnet-4-6"
+        }
+    ],
+    "license": "Copyright 2025 Andreas Buis",
+    "app_version": "1.3.0",
+    "utctime_updated": "2026-02-23T12:00:00.000000Z",
+    "package_name": "phantom_emailscreenshot",
+    "main_module": "email_screenshot_connector.py",
+    "min_phantom_version": "6.0.0",
+    "python_version": "3",
+    "logo": "email_screenshot.svg",
+    "logo_dark": "email_screenshot_dark.svg",
+    "configuration": {},
+    "pip3_dependencies": {
+        "pypi": [
+            {"module": "html2image"},
+            {"module": "Pillow"}
+        ]
+    },
+    "actions": [
+        {
+            "action": "test connectivity",
+            "identifier": "test_connectivity",
+            "description": "Validate the asset configuration for connectivity",
+            "type": "test",
+            "read_only": true,
+            "parameters": {},
+            "output": [],
+            "versions": "EQ(*)"
+        },
+        {
+            "action": "render email",
+            "identifier": "render_email",
+            "description": "Renders an email body as an Outlook-style PNG screenshot and stores it in the vault",
+            "type": "generic",
+            "read_only": false,
+            "render": {
+                "type": "custom",
+                "width": 10,
+                "height": 5,
+                "view": "email_screenshot_view.display_email",
+                "title": "Email Screenshot"
+            },
+            "parameters": {
+                "email_body": {
+                    "description": "The email body content (HTML or plain text)",
+                    "data_type": "string",
+                    "required": true,
+                    "order": 0
+                },
+                "content_type": {
+                    "description": "Content type of the email body",
+                    "data_type": "string",
+                    "required": false,
+                    "default": "text/html",
+                    "value_list": ["text/html", "text/plain"],
+                    "order": 1
+                },
+                "subject": {
+                    "description": "Email subject line",
+                    "data_type": "string",
+                    "required": false,
+                    "default": "(No Subject)",
+                    "order": 2
+                },
+                "sender": {
+                    "description": "Sender email address or display name",
+                    "data_type": "string",
+                    "required": false,
+                    "order": 3
+                },
+                "recipient": {
+                    "description": "Recipient email address",
+                    "data_type": "string",
+                    "required": false,
+                    "order": 4
+                },
+                "date": {
+                    "description": "Email date and time (e.g. Mon, 20 Jan 2025 14:30:00 +0000)",
+                    "data_type": "string",
+                    "required": false,
+                    "order": 5
+                },
+                "width": {
+                    "description": "Screenshot width in pixels",
+                    "data_type": "numeric",
+                    "required": false,
+                    "default": 900,
+                    "order": 6
+                },
+                "filename_prefix": {
+                    "description": "Optional prefix for the output filename (e.g. 'phishing', 'incident42'). Alphanumeric and underscores only, max 32 chars.",
+                    "data_type": "string",
+                    "required": false,
+                    "default": "",
+                    "order": 7
+                }
+            },
+            "output": [
+                {
+                    "data_path": "action_result.status",
+                    "data_type": "string",
+                    "example_values": ["success", "failed"]
+                },
+                {
+                    "data_path": "action_result.data.*.vault_id",
+                    "data_type": "string",
+                    "contains": ["vault id", "sha1"],
+                    "column_name": "Vault ID",
+                    "column_order": 0
+                },
+                {
+                    "data_path": "action_result.data.*.file_name",
+                    "data_type": "string",
+                    "column_name": "File Name",
+                    "column_order": 1
+                },
+                {
+                    "data_path": "action_result.data.*.artifact_id",
+                    "data_type": "string",
+                    "column_name": "Artifact ID",
+                    "column_order": 2
+                },
+                {
+                    "data_path": "action_result.data.*.base64_data",
+                    "data_type": "string",
+                    "column_name": "Screenshot (Base64)",
+                    "column_order": 3
+                },
+                {
+                    "data_path": "action_result.data.*.file_size_bytes",
+                    "data_type": "numeric",
+                    "column_name": "File Size (bytes)",
+                    "column_order": 4
+                },
+                {
+                    "data_path": "action_result.data.*.subject",
+                    "data_type": "string",
+                    "column_name": "Subject",
+                    "column_order": 5
+                },
+                {
+                    "data_path": "action_result.data.*.sender",
+                    "data_type": "string",
+                    "column_name": "Sender",
+                    "column_order": 6
+                },
+                {
+                    "data_path": "action_result.data.*.content_type_rendered",
+                    "data_type": "string",
+                    "column_name": "Content Type",
+                    "column_order": 7
+                },
+                {
+                    "data_path": "action_result.summary.vault_id",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "action_result.summary.artifact_id",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "action_result.summary.file_name",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "action_result.summary.file_size_bytes",
+                    "data_type": "numeric"
+                },
+                {
+                    "data_path": "action_result.summary.status",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "action_result.message",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "summary.total_objects",
+                    "data_type": "numeric"
+                },
+                {
+                    "data_path": "summary.total_objects_successful",
+                    "data_type": "numeric"
+                }
+            ],
+            "versions": "EQ(*)"
+        }
+    ]
+}
