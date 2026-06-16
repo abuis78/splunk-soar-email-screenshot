@@ -309,6 +309,23 @@ def render_html_email(
     body = re.sub(r"(?is)<body[^>]*>|</body>", "", body)
     body = body.strip()
 
+    # ── SECURITY: strip active content before it reaches Chromium ──
+    # The body is attacker-controlled phishing HTML. Outbound network is already
+    # blocked at the Chrome level (see connector custom_flags), but we also remove
+    # anything that could execute code or pull resources — defense in depth.
+    body = re.sub(r"(?is)<script\b.*?</script\s*>", "", body)   # inline + remote JS
+    body = re.sub(r"(?is)<script\b[^>]*/?>", "", body)          # self-closing / unclosed
+    body = re.sub(r"(?is)<iframe\b.*?</iframe\s*>", "", body)
+    body = re.sub(r"(?is)<iframe\b[^>]*/?>", "", body)
+    body = re.sub(r"(?is)<object\b.*?</object\s*>", "", body)
+    body = re.sub(r"(?is)<embed\b[^>]*/?>", "", body)
+    # Inline event handlers:  on*="…"  on*='…'  on*=bare
+    body = re.sub(r'(?i)\son[a-z]+\s*=\s*"[^"]*"', "", body)
+    body = re.sub(r"(?i)\son[a-z]+\s*=\s*'[^']*'", "", body)
+    body = re.sub(r"(?i)\son[a-z]+\s*=\s*[^\s>]+", "", body)
+    # Neutralise javascript: URIs in href/src
+    body = re.sub(r"(?i)(href|src)\s*=\s*([\"']?)\s*javascript:[^\"'>\s]*", r"\1=\2#", body)
+
     # Neutralise any scroll / overflow rules inside the email
     body = re.sub(
         r"(?i)(overflow\s*:\s*)(scroll|auto|hidden)",

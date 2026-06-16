@@ -2,7 +2,7 @@
 
 **Publisher:** Andreas Buis  
 **Contributors:** Andreas Buis, Created with Claude (model claude-sonnet-4-6)  
-**Version:** 1.2.0  
+**Version:** 1.4.0  
 **Min. Phantom Version:** 6.0.0  
 **Python:** 3  
 
@@ -131,7 +131,7 @@ google-chrome-stable --version
 ## App Installation in SOAR
 
 1. Open **SOAR UI** → Apps → **Install App**
-2. Upload `email_screenshot_v1.2.0_final.tar`
+2. Upload `email_screenshot_v1.4.0.tar`
 3. SOAR automatically installs `html2image` and `Pillow` via pip
 4. **Create asset:** Apps → Email Screenshot → **Configure New Asset**
    - Asset Name: e.g. `email screenshot`
@@ -175,13 +175,16 @@ Renders an email body as an Outlook-style PNG screenshot.
 | `recipient` | string | | — | Recipient address |
 | `date` | string | | — | Date e.g. `Thu, 20 Feb 2026 14:30:00 +0100` |
 | `width` | numeric | | `900` | Screenshot width in pixels |
+| `filename_prefix` | string | | — | Optional output-filename prefix (alphanumeric + `_`, max 32 chars) |
 
 **Output data paths:**
 
 | Data path | Type | Description |
 |-----------|------|-------------|
 | `action_result.data.*.vault_id` | string | SOAR vault ID of the PNG file |
-| `action_result.data.*.base64_data` | string | Base64-encoded PNG (for direct downstream use) |
+| `action_result.data.*.artifact_id` | string | ID of the `email screenshot` artifact created on the container |
+| `action_result.data.*.file_name` | string | Generated PNG filename |
+| `action_result.data.*.base64_data` | string | Base64-encoded PNG (for direct downstream use; not shown as a table column) |
 | `action_result.data.*.file_size_bytes` | numeric | File size in bytes |
 | `action_result.data.*.subject` | string | Subject line |
 | `action_result.data.*.sender` | string | Sender address |
@@ -246,9 +249,20 @@ Typical savings: **30–60% of PNG file size**.
 
 ---
 
+## Security Model
+
+This app renders **attacker-controlled HTML** (phishing email bodies) in headless Chromium. Two layers protect the SOAR appliance:
+
+1. **No outbound network during rendering.** Chrome is started with `--host-resolver-rules=MAP * ~NOTFOUND` (plus `--no-proxy-server`, `--dns-prefetch-disable`). Every hostname resolution fails, so the email **cannot fire tracking pixels, load remote images/CSS/fonts, or reach internal hosts (SSRF)**. The phisher gets no "mail was opened" callback. Local rendering of the supplied HTML needs no DNS, so visual fidelity is unaffected.
+2. **Active content is stripped.** Before rendering, `<script>`, `<iframe>`, `<object>`, `<embed>`, inline `on*=` event handlers and `javascript:` URIs are removed from the email body (defense in depth, in case a binary ever runs with network access).
+
+> Chrome still runs with `--no-sandbox` (required for the `phantom` service user on most appliances). The two layers above are what keep hostile email content contained.
+
+---
+
 ## Known Limitations
 
-- **External images in HTML emails** are not loaded (Chromium runs headless without network access in the SOAR environment). Images appear as empty placeholders.
+- **External images in HTML emails** are not loaded — remote fetches are deliberately blocked (see Security Model). Images appear as empty placeholders. This is intentional, not a bug.
 - **Fonts** in the screenshot reflect the system font of the SOAR appliance OS, not the original email client.
 - **Unicode / Emoji** require corresponding system fonts. If emoji appear as boxes: `sudo dnf install google-noto-emoji-fonts -y`
 - **Very long emails** (>500 KB HTML) may result in long rendering times (>30s).
@@ -327,6 +341,8 @@ phenv python3 email_screenshot_connector.py /tmp/test_render.json
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4.0 | 2026-06-16 | **Security:** block all outbound network during rendering (`--host-resolver-rules=MAP * ~NOTFOUND`) so phishing mails can't fire tracking pixels / SSRF; strip `<script>`, `<iframe>`, `<object>`, `<embed>`, inline `on*=` handlers and `javascript:` URIs from the email body before rendering. **Fix:** always delete the temp PNG after vault add (no more `/tmp` leak). base64 no longer a result-table column (DB/UI bloat). Unknown action now returns `APP_ERROR`. |
+| 1.3.0 | 2026-02-23 | First public release. Create an `email screenshot` artifact on the container (vaultId/fileName CEF); expose `artifact_id` in output + widget; `filename_prefix` parameter |
 | 1.2.0 | 2026-02-20 | Added Pillow auto-crop, numpy-based background detection algorithm |
 | 1.1.0 | 2026-02-20 | Custom widget (email_screenshot_view.py + .html), scrollbar fix, `--hide-scrollbars` Chrome flag |
 | 1.0.0 | 2026-02-19 | Initial release, `render_email` and `test_connectivity` actions |

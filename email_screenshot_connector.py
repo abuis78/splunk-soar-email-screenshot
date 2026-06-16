@@ -109,6 +109,16 @@ class EmailScreenshotConnector(BaseConnector):
                     "--disable-software-rasterizer",
                     "--hide-scrollbars",          # ← explicit: hide scrollbars
                     "--run-all-compositor-stages-before-draw",
+                    # ── SECURITY: never fetch remote resources ──
+                    # We render attacker-controlled email HTML. Resolving any
+                    # hostname to NOTFOUND blocks all outbound requests, so
+                    # tracking pixels / remote images / CSS / fonts cannot fire
+                    # (no "mail was opened" callback to the phisher) and no SSRF
+                    # against internal hosts is possible. Local html_str rendering
+                    # needs no DNS, so fidelity is unaffected.
+                    "--host-resolver-rules=MAP * ~NOTFOUND",
+                    "--no-proxy-server",
+                    "--dns-prefetch-disable",
                 ],
             }
             if chrome:
@@ -204,11 +214,15 @@ class EmailScreenshotConnector(BaseConnector):
             safe_prefix += "_"
         return "{}{}_{}.png".format(safe_prefix, ts, uid)
 
-    def _store_to_vault(self, raw_bytes, filename, action_result):
+    def _store_to_vault(self, raw_bytes, filename):
         """
         Store PNG bytes in the SOAR Vault, then create an Artifact
         'email screenshot' on the container that carries vault_id + filename.
         Returns dict with vault_id and artifact_id.
+
+        The temporary file written for vault_add is always removed afterwards
+        (vault_add copies it into the Vault store), so /tmp does not accumulate
+        PNGs over repeated runs.
         """
         try:
             import phantom.vault as phantom_vault
@@ -221,54 +235,61 @@ class EmailScreenshotConnector(BaseConnector):
                 tmp.write(raw_bytes)
                 tmp_path = tmp.name
 
-            vault_ret = phantom_vault.vault_add(
-                container=container_id,
-                file_location=tmp_path,
-                file_name=filename,
-            )
-            if not (vault_ret and vault_ret[0]):
-                self.save_progress("Vault warning: {}".format(vault_ret))
-                return {"vault_id": "", "artifact_id": "", "file_path": tmp_path}
-
-            vault_id = vault_ret[2]
-            self.save_progress("Vault stored: {} → {}".format(filename, vault_id))
-
-            # --- 2. Create Artifact on the container ---
-            artifact_id = ""
             try:
-                artifact = {
-                    "name":         "email screenshot",
-                    "label":        "artifact",
-                    "container_id": container_id,
-                    "source_data_identifier": filename,
-                    "cef": {
-                        "vaultId":  vault_id,
-                        "fileName": filename,
-                    },
-                    "cef_types": {
-                        "vaultId":  ["vault id"],
-                        "fileName": [],
-                    },
-                    "run_automation": False,
-                }
-                import phantom.rules as ph_rules
-                ret_val, msg, artifact_id_list = ph_rules.add_artifact(
+                vault_ret = phantom_vault.vault_add(
                     container=container_id,
-                    artifact=artifact,
+                    file_location=tmp_path,
+                    file_name=filename,
                 )
-                if ret_val and artifact_id_list:
-                    artifact_id = str(artifact_id_list[0])
-                    self.save_progress("Artifact created: id={}".format(artifact_id))
-                else:
-                    self.save_progress("Artifact creation warning: {}".format(msg))
-            except Exception as art_err:
-                self.save_progress("Artifact creation failed (non-fatal): {}".format(str(art_err)))
+                if not (vault_ret and vault_ret[0]):
+                    self.save_progress("Vault warning: {}".format(vault_ret))
+                    return {"vault_id": "", "artifact_id": ""}
 
-            return {
-                "vault_id":    vault_id,
-                "artifact_id": artifact_id,
-                "file_path":   tmp_path,
-            }
+                vault_id = vault_ret[2]
+                self.save_progress("Vault stored: {} → {}".format(filename, vault_id))
+
+                # --- 2. Create Artifact on the container ---
+                artifact_id = ""
+                try:
+                    artifact = {
+                        "name":         "email screenshot",
+                        "label":        "artifact",
+                        "container_id": container_id,
+                        "source_data_identifier": filename,
+                        "cef": {
+                            "vaultId":  vault_id,
+                            "fileName": filename,
+                        },
+                        "cef_types": {
+                            "vaultId":  ["vault id"],
+                            "fileName": [],
+                        },
+                        "run_automation": False,
+                    }
+                    import phantom.rules as ph_rules
+                    ret_val, msg, artifact_id_list = ph_rules.add_artifact(
+                        container=container_id,
+                        artifact=artifact,
+                    )
+                    if ret_val and artifact_id_list:
+                        artifact_id = str(artifact_id_list[0])
+                        self.save_progress("Artifact created: id={}".format(artifact_id))
+                    else:
+                        self.save_progress("Artifact creation warning: {}".format(msg))
+                except Exception as art_err:
+                    self.save_progress("Artifact creation failed (non-fatal): {}".format(str(art_err)))
+
+                return {
+                    "vault_id":    vault_id,
+                    "artifact_id": artifact_id,
+                }
+            finally:
+                # vault_add copies the file into the Vault — remove the temp copy
+                # (NamedTemporaryFile was opened with delete=False).
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
         except Exception as e:
             self.save_progress("Vault storage failed (non-fatal): {}".format(str(e)))
@@ -343,7 +364,7 @@ class EmailScreenshotConnector(BaseConnector):
 
                 file_size  = len(raw_bytes)
                 b64_data   = base64.b64encode(raw_bytes).decode("utf-8")
-                vault_info = self._store_to_vault(raw_bytes, filename, action_result)
+                vault_info = self._store_to_vault(raw_bytes, filename)
                 vault_id   = vault_info.get("vault_id", "")   if vault_info else ""
                 artifact_id = vault_info.get("artifact_id", "") if vault_info else ""
 
@@ -386,7 +407,8 @@ class EmailScreenshotConnector(BaseConnector):
         handler = dispatch.get(action_id)
         if handler:
             return handler(param)
-        return phantom.APP_SUCCESS
+        self.save_progress("Unsupported action: {}".format(action_id))
+        return phantom.APP_ERROR
 
 
 # ----------------------------------------------------------------------
