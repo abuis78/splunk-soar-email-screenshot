@@ -2,7 +2,7 @@
 
 **Publisher:** Andreas Buis  
 **Contributors:** Andreas Buis, Created with Claude (model claude-sonnet-4-6)  
-**Version:** 1.4.0  
+**Version:** 1.4.1  
 **Min. Phantom Version:** 6.0.0  
 **Python:** 3  
 
@@ -251,12 +251,13 @@ Typical savings: **30–60% of PNG file size**.
 
 ## Security Model
 
-This app renders **attacker-controlled HTML** (phishing email bodies) in headless Chromium. Two layers protect the SOAR appliance:
+This app renders **attacker-controlled HTML** (phishing email bodies) in headless Chromium. Three layers protect the SOAR appliance:
 
-1. **No outbound network during rendering.** Chrome is started with `--host-resolver-rules=MAP * ~NOTFOUND` (plus `--no-proxy-server`, `--dns-prefetch-disable`). Every hostname resolution fails, so the email **cannot fire tracking pixels, load remote images/CSS/fonts, or reach internal hosts (SSRF)**. The phisher gets no "mail was opened" callback. Local rendering of the supplied HTML needs no DNS, so visual fidelity is unaffected.
-2. **Active content is stripped.** Before rendering, `<script>`, `<iframe>`, `<object>`, `<embed>`, inline `on*=` event handlers and `javascript:` URIs are removed from the email body (defense in depth, in case a binary ever runs with network access).
+1. **JavaScript is disabled at the engine level.** Chrome runs with `--blink-settings=scriptEnabled=false`. A static email screenshot never needs JS, and disabling it in Blink neutralises **all** script-execution vectors — including HTML-sanitiser bypasses such as `<img src=x/onerror=…>`, where `/` is a valid attribute separator a regex can't reliably catch. This is the primary control.
+2. **No outbound network during rendering.** Chrome is started with `--host-resolver-rules=MAP * ~NOTFOUND` (plus `--no-proxy-server`, `--dns-prefetch-disable`). Every hostname resolution fails, so the email **cannot fire tracking pixels, load remote images/CSS/fonts, or reach internal hosts (SSRF)**. The phisher gets no "mail was opened" callback. Local rendering of the supplied HTML needs no DNS, so visual fidelity is unaffected.
+3. **Active content is stripped** (defense in depth). Before rendering, `<script>`, `<iframe>`, `<object>`, `<embed>`, inline `on*=` event handlers and `javascript:` URIs are removed from the email body. The regex sanitiser is deliberately treated as cleanup, **not** a security boundary — layers 1 and 2 are the boundary.
 
-> Chrome still runs with `--no-sandbox` (required for the `phantom` service user on most appliances). The two layers above are what keep hostile email content contained.
+> Chrome still runs with `--no-sandbox` (required for the `phantom` service user on most appliances). Disabling JS (layer 1) is what removes the main reason that matters; the three layers above keep hostile email content contained.
 
 ---
 
@@ -341,6 +342,7 @@ phenv python3 email_screenshot_connector.py /tmp/test_render.json
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4.1 | 2026-06-16 | **Security hardening (audit follow-up):** disable JavaScript at the engine level (`--blink-settings=scriptEnabled=false`) — neutralises regex-sanitiser bypasses like `<img src=x/onerror=…>` (issue #2); clamp `width` to 320–2000 px to prevent a memory-DoS via oversized canvas (issue #3). |
 | 1.4.0 | 2026-06-16 | **Security:** block all outbound network during rendering (`--host-resolver-rules=MAP * ~NOTFOUND`) so phishing mails can't fire tracking pixels / SSRF; strip `<script>`, `<iframe>`, `<object>`, `<embed>`, inline `on*=` handlers and `javascript:` URIs from the email body before rendering. **Fix:** always delete the temp PNG after vault add (no more `/tmp` leak). base64 no longer a result-table column (DB/UI bloat). Unknown action now returns `APP_ERROR`. |
 | 1.3.0 | 2026-02-23 | First public release. Create an `email screenshot` artifact on the container (vaultId/fileName CEF); expose `artifact_id` in output + widget; `filename_prefix` parameter |
 | 1.2.0 | 2026-02-20 | Added Pillow auto-crop, numpy-based background detection algorithm |

@@ -119,6 +119,13 @@ class EmailScreenshotConnector(BaseConnector):
                     "--host-resolver-rules=MAP * ~NOTFOUND",
                     "--no-proxy-server",
                     "--dns-prefetch-disable",
+                    # ── SECURITY: disable JavaScript at the engine level ──
+                    # A static email screenshot never needs JS. Disabling it in
+                    # Blink neutralises ALL script-execution vectors regardless of
+                    # HTML-sanitiser bypasses — e.g. `<img src=x/onerror=…>`, where
+                    # `/` is a valid HTML attribute separator the regex can't catch.
+                    # The regex sanitiser + network block remain as defense in depth.
+                    "--blink-settings=scriptEnabled=false",
                 ],
             }
             if chrome:
@@ -326,7 +333,9 @@ class EmailScreenshotConnector(BaseConnector):
         sender           = param.get("sender", "")
         recipient        = param.get("recipient", "")
         date_str         = param.get("date", "")
-        width            = int(param.get("width", 900))
+        # Clamp to a sane range: guards against a huge canvas (memory DoS) and
+        # against 0/negative values. SOAR validates numeric type, not range.
+        width            = max(320, min(int(param.get("width", 900) or 900), 2000))
         filename_prefix  = param.get("filename_prefix", "").strip()
 
         if not email_body:
