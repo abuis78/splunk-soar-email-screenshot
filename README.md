@@ -342,6 +342,7 @@ phenv python3 email_screenshot_connector.py /tmp/test_render.json
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4.2 | 2026-11-26 | **SOAR 8.7:** declare `"python_version": "3.13"` — `"3"` resolves to Python 3.9, which SOAR 8.7 rejects ("connector's python versions are unsupported"). |
 | 1.4.1 | 2026-06-16 | **Security hardening (audit follow-up):** disable JavaScript at the engine level (`--blink-settings=scriptEnabled=false`) — neutralises regex-sanitiser bypasses like `<img src=x/onerror=…>` (issue #2); clamp `width` to 320–2000 px to prevent a memory-DoS via oversized canvas (issue #3). |
 | 1.4.0 | 2026-06-16 | **Security:** block all outbound network during rendering (`--host-resolver-rules=MAP * ~NOTFOUND`) so phishing mails can't fire tracking pixels / SSRF; strip `<script>`, `<iframe>`, `<object>`, `<embed>`, inline `on*=` handlers and `javascript:` URIs from the email body before rendering. **Fix:** always delete the temp PNG after vault add (no more `/tmp` leak). base64 no longer a result-table column (DB/UI bloat). Unknown action now returns `APP_ERROR`. |
 | 1.3.0 | 2026-02-23 | First public release. Create an `email screenshot` artifact on the container (vaultId/fileName CEF); expose `artifact_id` in output + widget; `filename_prefix` parameter |
